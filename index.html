@@ -13,6 +13,8 @@
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15202b;--card:#1e2d3b;--tx:#eef2f6;--mut:#9fb0c1;--ac:#ffb020;--acx:#1a1200;--bd:#33465a;--bad:#ff7b6b}}
 :root[data-theme="dark"]{--bg:#15202b;--card:#1e2d3b;--tx:#eef2f6;--mut:#9fb0c1;--ac:#ffb020;--acx:#1a1200;--bd:#33465a;--bad:#ff7b6b}
 *{box-sizing:border-box}
+html,body{overscroll-behavior:none}
+.lock{-webkit-user-select:none;user-select:none;touch-action:manipulation}
 html,body{margin:0;background:var(--bg);color:var(--tx);font:17px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 main{max-width:640px;margin:0 auto;padding:14px 14px 96px}
 h1{font-size:1.5rem;margin:6px 0 14px}
@@ -44,7 +46,7 @@ nav button.on{color:var(--ac);box-shadow:inset 0 3px 0 var(--ac)}
 </style>
 </head>
 <body>
-<div id="app"><main>
+<div id="app"><main :class="{lock:locked}">
 <h1>{{ titles[tab] }}</h1>
 
 <!-- ITINÉRAIRES -->
@@ -65,11 +67,23 @@ nav button.on{color:var(--ac);box-shadow:inset 0 3px 0 var(--ac)}
         <button class="s" @click="s.e=!s.e">Modifier</button>
         <div v-if="s.e" style="width:100%">
           <input v-model="s.n" placeholder="Nom de la gare" style="margin-bottom:6px">
-          <div class="grid2">
+          <div class="row" style="margin-bottom:6px">
+            <button class="s g" :class="{p:s.mode!=='audio'}" @click="s.mode='text'">Texte (voix de synthèse)</button>
+            <button class="s g" :class="{p:s.mode==='audio'}" @click="s.mode='audio'">Ma voix</button>
+          </div>
+          <div v-if="s.mode!=='audio'" class="grid2">
             <input v-model="s.vd" placeholder="Vitesse de départ">
             <input v-model="s.zone" placeholder="Zone (ex. 60)">
             <input v-model="s.men" placeholder="Menace">
             <input v-model="s.pan" placeholder="Pancarte">
+          </div>
+          <div v-else>
+            <div class="mut" style="margin-bottom:6px">{{ s.a ? 'Enregistrement présent.' : 'Aucun enregistrement.' }} Dis tout en une fois : gare, direction, vitesse, zone, menaces, pancarte.</div>
+            <div class="row">
+              <button class="s" :class="{p:recId===s.id}" @click="recId===s.id?recStop():recStart(s)">{{ recId===s.id ? 'Arrêter' : (s.a ? 'Réenregistrer' : 'Enregistrer') }}</button>
+              <button class="s" :disabled="!s.a" @click="playRec(s)">Écouter</button>
+              <button class="s d" :disabled="!s.a" @click="delRec(s)">Supprimer</button>
+            </div>
           </div>
           <div class="row" style="margin-top:6px">
             <button class="s" @click="move(r.s[r.dir],si,-1)">Monter</button>
@@ -90,6 +104,15 @@ nav button.on{color:var(--ac);box-shadow:inset 0 3px 0 var(--ac)}
     <textarea v-model="nr.list" rows="5" placeholder="Une gare par ligne, dans le sens aller" style="width:100%;background:var(--bg);color:var(--tx);border:1px solid var(--bd);border-radius:10px;padding:10px;font:inherit"></textarea>
     <p class="mut">Le sens retour est créé automatiquement avec les gares inversées.</p>
     <button class="p" @click="addRoute">Créer l'itinéraire</button>
+  </div>
+  <div class="card">
+    <h2>Sauvegarde</h2>
+    <div class="row">
+      <button class="s g" @click="exportRoutes">Exporter</button>
+      <button class="s g" @click="$refs.imp.click()">Importer</button>
+      <input ref="imp" type="file" accept=".json,application/json" style="display:none" @change="importRoutes">
+    </div>
+    <p class="mut">Le fichier contient les itinéraires et tes enregistrements vocaux. À l'import, un itinéraire du même nom est remplacé.</p>
   </div>
 </section>
 
@@ -161,14 +184,19 @@ nav button.on{color:var(--ac);box-shadow:inset 0 3px 0 var(--ac)}
   </template>
   <div v-else class="run">
     <div class="card">
-      <div class="mut">{{ snap.name }} · dernière annonce</div>
+      <div class="mut">{{ snap.name }} · {{ wakeOn ? 'écran maintenu allumé' : 'veille possible' }} · {{ locked ? 'verrouillé' : 'déverrouillé' }}</div>
+      <div class="mut">Dernière annonce</div>
       <div class="last">{{ last || 'Aucune pour le moment' }}</div>
     </div>
     <button v-if="plan.length>idx" class="big" @click="ok">
       <small>Appuyer à l'arrivée</small>OK<br>{{ plan[idx].n }}
     </button>
     <div v-else class="card"><h2>Terminus</h2><div class="mut">Journée terminée. Elle sera supprimée quand tu fermes.</div></div>
-    <div class="grid3">
+    <div v-if="locked" class="grid2">
+      <button @click="repeat" style="min-height:64px">Répéter</button>
+      <button class="d" style="min-height:64px" @click="unlockTap">Déverrouiller : {{ taps }}/3</button>
+    </div>
+    <div v-else class="grid3">
       <button @click="repeat" style="min-height:64px">Répéter</button>
       <button @click="saveTpl(snap)" style="min-height:64px">Modèle</button>
       <button class="d" style="min-height:64px" @click="stop(plan.length>idx)">{{ plan.length>idx ? 'Terminer' : 'Fermer' }}</button>
@@ -177,7 +205,7 @@ nav button.on{color:var(--ac);box-shadow:inset 0 3px 0 var(--ac)}
 </section>
 </main>
 <div v-if="msg" class="toast">{{ msg }}</div>
-<nav>
+<nav v-if="!locked">
   <button :class="{on:tab==='routes'}" @click="tab='routes'">Itinéraires</button>
   <button :class="{on:tab==='day'}" @click="tab='day'">Ma journée</button>
   <button :class="{on:tab==='run'}" @click="tab='run'">Conduite</button>
@@ -199,7 +227,12 @@ function _i(e,t){const n=ns(e);class s extends xi{constructor(e){super(n,e,t)}}r
 <script>
 const {createApp,reactive,ref,computed,watch}=Vue;
 const KEY='etude-ligne-v1';
-const mk=(n,e)=>({n,vd:'',zone:'',men:'',pan:'',e:!!e});
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const mk=(n,e)=>({id:uid(),n,vd:'',zone:'',men:'',pan:'',mode:'text',a:false,e:!!e});
+const idb=()=>new Promise((ok,ko)=>{const r=indexedDB.open('etude-ligne-audio',1);r.onupgradeneeded=()=>r.result.createObjectStore('a');r.onsuccess=()=>ok(r.result);r.onerror=()=>ko(r.error)});
+const aput=(k,b)=>idb().then(d=>new Promise((ok,ko)=>{const t=d.transaction('a','readwrite');t.objectStore('a').put(b,k);t.oncomplete=ok;t.onerror=ko}));
+const aget=k=>idb().then(d=>new Promise((ok,ko)=>{const q=d.transaction('a').objectStore('a').get(k);q.onsuccess=()=>ok(q.result);q.onerror=ko}));
+const adel=k=>idb().then(d=>new Promise((ok,ko)=>{const t=d.transaction('a','readwrite');t.objectStore('a').delete(k);t.oncomplete=ok;t.onerror=ko}));
 const rev=a=>a.slice().reverse().map(s=>mk(s.n));
 const clone=o=>JSON.parse(JSON.stringify(o));
 const seedA=['Bibliothèque François Mitterrand','Austerlitz','Saint-Michel Notre-Dame',"Musée d'Orsay",'Invalides',"Pont de l'Alma",'Champ de Mars-Tour Eiffel'].map(n=>mk(n));
@@ -216,6 +249,7 @@ const init=()=>{
  if(!d.templates)d.templates=[];
  if(Array.isArray(d.day)&&d.day.length)d.days.push({id:Date.now(),name:'Journée 1',items:d.day});
  delete d.day;
+ d.routes.forEach(r=>['A','B'].forEach(k=>r.s[k].forEach(x=>{x.id=x.id||uid();x.mode=x.mode||'text';x.a=!!x.a})));
  if(!d.days.some(x=>x.id===d.cur))d.cur=d.days[0]?d.days[0].id:0;
  return d;
 };
@@ -227,6 +261,7 @@ createApp({
   const nr=reactive({name:'',list:''});
   const add=reactive({rid:db.routes[0]?db.routes[0].id:0,dir:'A',start:0});
   const plan=ref([]),idx=ref(0),last=ref(''),runId=ref(0),snap=ref({name:'',items:[]}),msg=ref('');
+  const locked=ref(false),taps=ref(0),wakeOn=ref(false),recId=ref('');
   watch(db,()=>{try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){}},{deep:true});
   const toast=t=>{msg.value=t;setTimeout(()=>{msg.value=''},2500)};
   const curDay=computed(()=>db.days.find(d=>d.id===db.cur)||null);
@@ -238,7 +273,7 @@ createApp({
   const dayLabel=d=>{const f=d.items[0],l=d.items[d.items.length-1];const a=stationsOf(f)[f.start],b=stationsOf(l);return (a?a.n:'?')+' → '+(b.length?b[b.length-1].n:'?')};
   const dirEnd=(r,d)=>{const a=r.s[d];return a.length?a[a.length-1].n:'—'};
   const dirEndId=(id,d)=>{const r=db.routes.find(x=>x.id===id);return r?dirEnd(r,d):'—'};
-  const info=s=>[s.vd&&'départ '+s.vd,s.zone,s.men,s.pan].filter(Boolean).join(' · ');
+  const info=s=>s.mode==='audio'?(s.a?'Voix enregistrée':'Voix à enregistrer'):[s.vd&&'départ '+s.vd,s.zone,s.men,s.pan].filter(Boolean).join(' · ');
   const move=(a,i,d)=>{const j=i+d;if(j<0||j>=a.length)return;const t=a[i];a[i]=a[j];a[j]=t};
   const toggle=(it,n)=>{const k=it.off.indexOf(n);k<0?it.off.push(n):it.off.splice(k,1)};
   const addRoute=()=>{
@@ -264,7 +299,7 @@ createApp({
    db.days.push(d);db.cur=d.id;
   };
   const addItem=()=>{if(!add.rid||!curDay.value)return;curDay.value.items.push({rid:add.rid,dir:add.dir,start:add.start,off:[]})};
-  const startDay=d=>{
+  const startDay=async d=>{
    const p=[];
    d.items.forEach(it=>{
     stationsOf(it).forEach((s,i)=>{
@@ -276,8 +311,12 @@ createApp({
     });
    });
    if(!p.length)return toast('Aucune gare dans cette journée.');
-   plan.value=p;idx.value=0;last.value='';runId.value=d.id;snap.value=clone({name:d.name,items:d.items});tab.value='run';
-   try{navigator.wakeLock&&navigator.wakeLock.request('screen')}catch(e){}
+   plan.value=p;idx.value=0;last.value='';lastU=null;runId.value=d.id;snap.value=clone({name:d.name,items:d.items});tab.value='run';
+   locked.value=true;taps.value=0;wake();
+   try{document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen().catch(()=>{})}catch(e){}
+   try{history.pushState({lock:1},'')}catch(e){}
+   urls={};
+   await Promise.all(p.filter(x=>x.mode==='audio'&&x.a).map(async x=>{try{const b=await aget(x.id);if(b)urls[x.id]=URL.createObjectURL(b)}catch(e){}}));
   };
   const say=t=>{
    last.value=t;
@@ -286,23 +325,76 @@ createApp({
   };
   const ok=()=>{
    const s=plan.value[idx.value],n=plan.value[idx.value+1];
+   if(s.mode==='audio'&&urls[s.id]){last.value='Annonce vocale : '+s.n+(n?' → '+n.n:' (terminus)');lastU=urls[s.id];try{navigator.vibrate&&navigator.vibrate(60)}catch(e){}play(lastU);idx.value++;if(idx.value>=plan.value.length)locked.value=false;return}
+   lastU=null;
    const parts=['Gare actuelle '+s.n,n?'direction '+n.n:'terminus'];
    if(s.vd)parts.push('vitesse de départ '+s.vd);
    if(s.men)parts.push(s.men);
    if(s.zone)parts.push(s.zone);
    if(s.pan)parts.push(s.pan);
    say(parts.join(', '));
-   idx.value++;
+   idx.value++;if(idx.value>=plan.value.length)locked.value=false;
   };
-  const repeat=()=>{if(last.value)say(last.value)};
+  const repeat=()=>{if(lastU)play(lastU);else if(last.value)say(last.value)};
   const stop=ask=>{
    if(ask&&!confirm('Terminer ? La journée sera supprimée (pense au bouton Modèle).'))return;
    db.days=db.days.filter(d=>d.id!==runId.value);fixCur();
    plan.value=[];idx.value=0;last.value='';runId.value=0;
    try{speechSynthesis.cancel()}catch(e){}
+   unwake();locked.value=false;try{document.fullscreenElement&&document.exitFullscreen()}catch(e){}
    toast('Journée supprimée.');
   };
-  return{db,tab,titles,nr,add,plan,idx,last,snap,msg,curDay,routeOf,stationsOf,addStations,dirLabel,dirEnd,dirEndId,dayLabel,info,move,toggle,addRoute,delRoute,newDay,delDay,saveTpl,useTpl,addItem,startDay,ok,repeat,stop,mk};
+  let urls={},lastU=null,audioEl=null,wl=null,mr=null,chunks=[],stream=null,tt=0;
+  const play=u=>{try{audioEl&&audioEl.pause();audioEl=new Audio(u);audioEl.play()}catch(e){}};
+  const wake=async()=>{try{wl=await navigator.wakeLock.request('screen');wakeOn.value=true;wl.addEventListener('release',()=>{wakeOn.value=false})}catch(e){wakeOn.value=false}};
+  const unwake=()=>{try{wl&&wl.release()}catch(e){}wl=null;wakeOn.value=false};
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&plan.value.length)wake()});
+  window.addEventListener('popstate',()=>{if(locked.value){try{history.pushState({lock:1},'')}catch(e){}}});
+  const unlockTap=()=>{taps.value++;clearTimeout(tt);tt=setTimeout(()=>{taps.value=0},2000);if(taps.value>=3){taps.value=0;locked.value=false;toast('Mode conduite désactivé.')}};
+  const recStart=async x=>{
+   try{
+    stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    mr=new MediaRecorder(stream,{audioBitsPerSecond:32000});chunks=[];
+    mr.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};
+    mr.onstop=async()=>{stream.getTracks().forEach(t=>t.stop());const b=new Blob(chunks,{type:mr.mimeType||'audio/webm'});try{await aput(x.id,b);x.a=true;toast('Enregistrement sauvegardé.')}catch(e){toast("Échec de l'enregistrement.")}recId.value=''};
+    mr.start();recId.value=x.id;
+   }catch(e){toast('Micro inaccessible : autorise-le dans Chrome.')}
+  };
+  const recStop=()=>{try{if(mr&&mr.state!=='inactive')mr.stop()}catch(e){}};
+  const playRec=async x=>{try{const b=await aget(x.id);if(b)play(URL.createObjectURL(b))}catch(e){}};
+  const delRec=async x=>{try{await adel(x.id)}catch(e){}x.a=false};
+  const exportRoutes=async()=>{
+   try{
+    const routes=clone(db.routes);
+    for(const r of routes){delete r.open;for(const d of['A','B'])for(const x of r.s[d]){delete x.e;if(x.a){try{const b=await aget(x.id);if(b)x.audio=await new Promise(ok=>{const f=new FileReader();f.onload=()=>ok(f.result);f.readAsDataURL(b)})}catch(e){}}}}
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([JSON.stringify({v:1,routes})],{type:'application/json'}));
+    a.download='itineraires-'+new Date().toISOString().slice(0,10)+'.json';
+    document.body.appendChild(a);a.click();a.remove();toast('Fichier exporté.');
+   }catch(e){toast('Export impossible.')}
+  };
+  const importRoutes=ev=>{
+   const f=ev.target.files[0];ev.target.value='';if(!f)return;
+   const fr=new FileReader();
+   fr.onload=async()=>{try{
+    const j=JSON.parse(fr.result);if(!Array.isArray(j.routes))throw 0;
+    let n=0;
+    for(const r of j.routes){
+     for(const d of['A','B'])for(const x of r.s[d]){
+      x.id=x.id||uid();x.e=false;x.mode=x.mode||'text';
+      if(x.audio){try{await aput(x.id,await(await fetch(x.audio)).blob());x.a=true}catch(e){x.a=false}delete x.audio}else x.a=false;
+     }
+     r.open=false;r.dir=r.dir||'A';
+     const ex=db.routes.find(z=>z.name===r.name);
+     if(ex){r.id=ex.id;db.routes.splice(db.routes.indexOf(ex),1,r)}else{r.id=Date.now()+n;db.routes.push(r)}
+     n++;
+    }
+    if(!add.rid&&db.routes.length)add.rid=db.routes[0].id;
+    toast(n+' itinéraire(s) importé(s).');
+   }catch(e){toast('Fichier invalide.')}};
+   fr.readAsText(f);
+  };
+  return{locked,taps,wakeOn,recId,recStart,recStop,playRec,delRec,unlockTap,exportRoutes,importRoutes,db,tab,titles,nr,add,plan,idx,last,snap,msg,curDay,routeOf,stationsOf,addStations,dirLabel,dirEnd,dirEndId,dayLabel,info,move,toggle,addRoute,delRoute,newDay,delDay,saveTpl,useTpl,addItem,startDay,ok,repeat,stop,mk};
  }
 }).mount('#app');
 </script>
