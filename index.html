@@ -65,6 +65,7 @@ b,h2,.g,.mut,.big{overflow-wrap:anywhere}
       <button class="s" @click="r.open=!r.open">{{ r.open?'Fermer':'Ouvrir' }}</button></div>
     <div class="mut">{{ dirLabel(r,'A') }} · {{ dirLabel(r,'B') }}</div>
     <div v-if="r.open">
+      <input v-model="r.name" placeholder="Nom de l'itinéraire" style="margin-top:.625rem">
       <div class="row" style="margin:0.625rem 0">
         <button class="s g" :class="{p:r.dir==='A'}" @click="r.dir='A'">Direction {{ dirEnd(r,'A') }}</button>
         <button class="s g" :class="{p:r.dir==='B'}" @click="r.dir='B'">Direction {{ dirEnd(r,'B') }}</button>
